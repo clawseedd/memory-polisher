@@ -1,0 +1,72 @@
+{
+  "name": "memory-polisher",
+  "version": "1.0.0",
+  "description": "Intelligent memory organization for OpenClaw agents with automated topic discovery and crash-safe operations",
+  "main": "src/index.js",
+  "bin": {
+    "memory-polisher": "./src/index.js"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "lint": "eslint src/ test/",
+    "lint:fix": "eslint src/ test/ --fix"
+  },
+  "keywords": [
+    "memory",
+    "organization",
+    "openclaw",
+    "knowledge-management",
+    "embedding",
+    "semantic-search",
+    "raspberry-pi"
+  ],
+  "author": "OpenClaw Community",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/openclaw-community/memory-polisher.git"
+  },
+  "bugs": {
+    "url": "https://github.com/openclaw-community/memory-polisher/issues"
+  },
+  "homepage": "https://github.com/openclaw-community/memory-polisher#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "sqlite3": "^5.1.7",
+    "sqlite": "^5.1.1",
+    "chalk": "^4.1.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.57.0",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.29.1",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^6.1.1"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coverageDirectory": "./coverage",
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/index.js"
+    ],
+    "testMatch": [
+      "**/test/**/*.test.js"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "branches": 70,
+        "functions": 70,
+        "lines": 70,
+        "statements": 70
+      }
+    }
+  }
+}

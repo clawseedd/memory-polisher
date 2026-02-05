@@ -1,0 +1,180 @@
+# Memory Polisher Configuration v1.0.0
+# Optimized for Raspberry Pi 4 with EmbeddingGemma
+
+# =============================================================================
+# EXECUTION MODE
+# =============================================================================
+# Options: enhanced (uses embedding model) | mechanical (pure algorithms)
+execution_mode: enhanced
+
+# =============================================================================
+# TOPIC SIMILARITY SETTINGS
+# =============================================================================
+topic_similarity:
+  # Method: embedding (EmbeddingGemma) | levenshtein (string distance)
+  method: embedding
+  
+  # Model path (auto = use OpenClaw's configured embedding model)
+  model: auto  # or explicit path: google/embeddinggemma-300M
+  
+  # Matryoshka dimensions (256 = fast, 768 = accurate)
+  dimensions: 256
+  
+  # Similarity threshold (0-1, higher = stricter)
+  # 0.82 recommended for EmbeddingGemma
+  threshold: 0.82
+  
+  # Cache embeddings across runs
+  cache_embeddings: true
+  
+  # Fallback if embedding model fails
+  fallback:
+    method: levenshtein
+    threshold: 0.8
+
+# =============================================================================
+# SECURITY: Input validation rules
+# =============================================================================
+validation:
+  # Maximum hashtag length (prevent buffer overflow)
+  max_hashtag_length: 100
+  
+  # Maximum file size to process (MB)
+  max_file_size_mb: 50
+  
+  # Maximum number of hashtags per file
+  max_hashtags_per_file: 1000
+  
+  # Allowed characters in hashtags
+  allowed_hashtag_pattern: "^[a-z0-9_-]+$"
+  
+  # Block dangerous paths
+  block_path_patterns:
+    - "\\\\.\\\\."
+    - "/"
+    - "\\\\\\\\"
+    - "<"
+    - ">"
+    - "|"
+    - "\\\\x00"
+
+# =============================================================================
+# SYNONYM RULES (Domain-Specific)
+# =============================================================================
+# Define topic aliases that should always merge
+# Format: [canonical, alias1, alias2, ...]
+synonyms:
+  # Finance & Trading
+  - [trading, trade, trades, market, markets]
+  - [btc, bitcoin, crypto, cryptocurrency]
+  - [spy, spx, sp500, sandp]
+  
+  # Programming
+  - [coding, code, programming, dev, development]
+  - [python, py]
+  - [javascript, js, ecmascript]
+  - [typescript, ts]
+  
+  # Technology
+  - [ai, ml, machinelearning, llm]
+  - [rpi, raspberry, pi, raspberrypi]
+  
+  # Personal
+  - [health, fitness, wellness, exercise]
+  - [finance, money, budget, investing]
+  - [idea, ideas, project, projects]
+
+# =============================================================================
+# ARCHIVE SETTINGS
+# =============================================================================
+archive:
+  # Enable archiving old files
+  enabled: true
+  
+  # Grace period (days) before archiving
+  # Files older than this are moved to Archive/
+  grace_period_days: 3
+  
+  # Organize archive by year (Archive/2026/)
+  year_folders: true
+
+# =============================================================================
+# CRASH RECOVERY
+# =============================================================================
+recovery:
+  # Enable checkpoint system (resume support)
+  enable_checkpoints: true
+  
+  # Checkpoint file location (relative to memory/)
+  checkpoint_file: .polish-cache/checkpoint.json
+  
+  # Cache extracted sections before modifying files
+  cache_extractions: true
+  
+  # Backup files before modification
+  backup_before_modify: true
+  
+  # Max retry attempts on transient failures
+  max_retries: 3
+
+# =============================================================================
+# PERFORMANCE TUNING (Pi 4 Optimized)
+# =============================================================================
+performance:
+  # Embedding batch size (embeddings computed at once)
+  # Lower = less RAM, higher = faster
+  batch_size: 10
+  
+  # Parallel file writes (false = sequential, safer for SD cards)
+  parallel_writes: false
+  
+  # Embedding cache TTL (seconds, 30 days = 2592000)
+  embedding_cache_ttl: 2592000
+
+# =============================================================================
+# CLEANUP SETTINGS
+# =============================================================================
+cleanup:
+  # Automatically delete old cache files
+  auto_cleanup: true
+  
+  # Keep current session cache (hours) for rollback safety
+  keep_session_cache_hours: 24
+  
+  # Maximum cache size (MB) before forcing cleanup
+  max_cache_size_mb: 50
+
+# =============================================================================
+# LOGGING
+# =============================================================================
+logging:
+  # Enable transaction log (audit trail)
+  transaction_log: true
+  
+  # Verbose mode (detailed output for debugging)
+  verbose: false
+  
+  # Report output location (relative to memory/)
+  report_location: .polish-reports/
+
+# =============================================================================
+# ADVANCED SETTINGS (Usually don't need to change)
+# =============================================================================
+advanced:
+  # Lookback period (days) to scan
+  lookback_days: 7
+  
+  # Minimum hashtag frequency (filter noise)
+  min_tag_frequency: 2
+  
+  # File name pattern for daily logs
+  daily_log_pattern: "memory-YYYY-MM-DD.md"
+  
+  # Topic file location
+  topics_directory: Topics/
+  
+  # Archive directory
+  archive_directory: Archive/
+  
+  # Cache directory
+  cache_directory: .polish-cache/
