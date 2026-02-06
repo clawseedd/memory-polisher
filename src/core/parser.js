@@ -9,9 +9,9 @@
  * FIX: Corrected regex patterns for markdown stripping
  */
 
-const { unified } = require('unified');
-const remarkParse = require('remark-parse');
-const remarkStringify = require('remark-stringify');
+// NOTE: unified/remark packages are ESM in modern versions.
+// To keep this codebase CommonJS-friendly (and Jest-friendly), we lazy-load via dynamic import
+// inside the few methods that need it.
 
 class Parser {
     constructor(config, logger) {
@@ -46,7 +46,12 @@ class Parser {
             const nextHeader = headers[i + 1];
 
             const startLine = header.line;
-            const endLine = nextHeader ? nextHeader.line - 1 : lines.length - 1;
+            let endLine = nextHeader ? nextHeader.line - 1 : lines.length - 1;
+
+            // Trim trailing blank lines from the section to match test expectations
+            while (endLine > startLine && lines[endLine].trim() === '') {
+                endLine--;
+            }
 
             const sectionLines = lines.slice(startLine, endLine + 1);
             const sectionContent = sectionLines.join('\n').trim();
@@ -83,9 +88,10 @@ class Parser {
      */
     async parseMarkdownAST(content) {
         try {
-            const processor = unified()
-                .use(remarkParse);
+            const { unified } = await import('unified');
+            const remarkParse = (await import('remark-parse')).default;
 
+            const processor = unified().use(remarkParse);
             const tree = processor.parse(content);
             return tree;
         } catch (error) {
@@ -100,8 +106,8 @@ class Parser {
      */
     stripMarkdown(content) {
         return content
-            .replace(/!\\[.*?\\]\\(.*?\\)/g, '') // Images - CORRECT
-            .replace(/\\[([^\\]]+)\]\\(.*?\\)/g, '$1') // Links - CORRECT
+            .replace(/!\[.*?\]\(.*?\)/g, '') // Images
+            .replace(/\[([^\]]+)\]\(.*?\)/g, '$1') // Links
             .replace(/`{1,3}[^`]*`{1,3}/g, '') // Code blocks
             .replace(/[*_~]/g, '') // Bold/italic/strikethrough
             .replace(/^#+\s+/gm, '') // Headers
@@ -113,16 +119,15 @@ class Parser {
      * Validate markdown syntax
      */
     isValidMarkdown(content) {
-        try {
-            const processor = unified()
-                .use(remarkParse)
-                .use(remarkStringify);
+        // Lightweight validation (kept synchronous for tests).
+        // We avoid depending on ESM-only markdown parsers in a CommonJS/Jest environment.
+        if (typeof content !== 'string') return false;
 
-            processor.processSync(content);
-            return true;
-        } catch (error) {
-            return false;
-        }
+        // Very basic check for obviously-unclosed markdown link syntax like: [text](url
+        const hasUnclosedLink = /\[[^\]]*\]\([^)]*$/.test(content);
+        if (hasUnclosedLink) return false;
+
+        return true;
     }
 }
 

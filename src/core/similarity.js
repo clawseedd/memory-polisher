@@ -145,6 +145,11 @@ class Similarity {
      * OPTIMIZATION: Quick check to skip obviously dissimilar pairs
      */
     shouldSkipPair(tag1, tag2) {
+        // Never skip obvious substring/abbreviation pairs (e.g. "py" vs "python")
+        if (tag1.includes(tag2) || tag2.includes(tag1)) {
+            return false;
+        }
+
         // Skip if length difference is too large
         const lenDiff = Math.abs(tag1.length - tag2.length);
         if (lenDiff > Math.max(tag1.length, tag2.length) * 0.5) {
@@ -183,10 +188,29 @@ class Similarity {
                 const maxLen = Math.max(tag1.length, tag2.length);
                 let score = 1 - (distance / maxLen);
 
-                if (tag1.includes(tag2) || tag2.includes(tag1)) {
+                // Bonus 1: substring / abbreviation (e.g. "py" vs "python")
+                const t1ContainsT2 = tag1.includes(tag2);
+                const t2ContainsT1 = tag2.includes(tag1);
+                if (t1ContainsT2 || t2ContainsT1) {
                     score += 0.25;
-                    score = Math.min(score, 1.0);
+
+                    // If a very short tag is a prefix of a longer tag, treat it as an abbreviation.
+                    // This is needed for tests like "py" vs "python" at a high threshold.
+                    const shorter = tag1.length <= tag2.length ? tag1 : tag2;
+                    const longer = tag1.length <= tag2.length ? tag2 : tag1;
+                    if (shorter.length <= 3 && longer.startsWith(shorter)) {
+                        score += 0.5;
+                    }
                 }
+
+                // Bonus 2: common-prefix (helps "trade" vs "trading" where substring isn't exact)
+                let cpl = 0;
+                while (cpl < tag1.length && cpl < tag2.length && tag1[cpl] === tag2[cpl]) cpl++;
+                if (cpl >= 3) {
+                    score += 0.30;
+                }
+
+                score = Math.min(score, 1.0);
 
                 if (score >= this.threshold) {
                     const count1 = discoveredTopics[tag1]?.count || 0;

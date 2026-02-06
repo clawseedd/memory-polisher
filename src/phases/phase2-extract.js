@@ -28,12 +28,17 @@ class Phase2Extract {
         const memoryDir = path.join(process.cwd(), 'memory');
         const lookbackDays = this.config.advanced.lookback_days || 7;
 
-        // Get file list
-        const today = new Date();
-        const startDate = new Date(today);
-        startDate.setDate(today.getDate() - lookbackDays);
+        // Get file list (normalize to whole days in local time)
+        const now = new Date();
 
-        const files = await this.getFileList(memoryDir, startDate, today);
+        const endDate = new Date(now);
+        endDate.setHours(23, 59, 59, 999);
+
+        const startDate = new Date(now);
+        startDate.setDate(now.getDate() - lookbackDays);
+        startDate.setHours(0, 0, 0, 0);
+
+        const files = await this.getFileList(memoryDir, startDate, endDate);
         this.logger.info(`Extracting sections from ${files.length} files`);
 
         const allExtractions = [];
@@ -48,6 +53,12 @@ class Phase2Extract {
 
             // Process each section
             for (const section of sections) {
+                // Skip already-polished stubs to avoid recursive re-polishing
+                if (this.isPolishedStub(section.content)) {
+                    this.logger.debug(`Skipping polished stub section: ${section.title}`);
+                    continue;
+                }
+
                 // Detect hashtags in section
                 const hashtags = this.detectHashtags(section.content);
 
@@ -102,16 +113,18 @@ class Phase2Extract {
     }
 
     async getFileList(memoryDir, startDate, endDate) {
-        const files = await fs.readdir(memoryDir);
-        const pattern = /^memory-(\d{4})-(\d{2})-(\d{2})\.md$/;
+        // Reuse scanner logic: scan all .md files under memory/, excluding Topics/ etc.
+        const Scanner = require('../core/scanner');
+        const scanner = new Scanner(this.config, this.logger);
+        return scanner.findDailyLogs(memoryDir, startDate, endDate);
+    }
 
-        return files.filter(file => {
-            const match = file.match(pattern);
-            if (!match) return false;
-
-            const fileDate = new Date(match[1], match[2] - 1, match[3]);
-            return fileDate >= startDate && fileDate <= endDate;
-        }).sort();
+    isPolishedStub(content) {
+        if (!content) return false;
+        // Markers produced by Phase4Update.generateDailyLogStub
+        const hasPolishArrow = content.includes('→ **Polished to') || content.includes('→ **Primary:**');
+        const hasTopicsLink = content.includes('Topics/') || content.includes('Topics\\');
+        return hasPolishArrow && hasTopicsLink;
     }
 
     detectHashtags(content) {
@@ -153,8 +166,8 @@ class Phase2Extract {
     }
 
     generateExtractionId(filename, sectionIndex) {
-        const dateMatch = filename.match(/memory-(\d{8})/);
-        const dateStr = dateMatch ? dateMatch[1] : 'unknown';
+        const dateMatch = filename.match(/memory-(\d{4})-(\d{2})-(\d{2})/);
+        const dateStr = dateMatch ? `${dateMatch[1]}${dateMatch[2]}${dateMatch[3]}` : 'unknown';
         return `${dateStr}-${String(sectionIndex).padStart(2, '0')}`;
     }
 

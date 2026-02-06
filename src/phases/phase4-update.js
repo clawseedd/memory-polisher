@@ -9,8 +9,10 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const crypto = require('crypto');
 const FileOps = require('../core/fileops');
 const Transaction = require('../utils/transaction');
+const Backup = require('../utils/backup');
 
 class Phase4Update {
     constructor(config, logger, state) {
@@ -19,6 +21,7 @@ class Phase4Update {
         this.state = state;
         this.fileops = new FileOps(config, logger);
         this.transaction = new Transaction(config, logger);
+        this.backup = new Backup(config, logger);
     }
 
     async execute() {
@@ -77,6 +80,10 @@ class Phase4Update {
 
             // Read original file
             let content = await fs.readFile(filePath, 'utf8');
+
+            // Ensure we have a rollback backup for this file and record the hash in the transaction.
+            const hash = crypto.createHash('sha256').update(content).digest('hex');
+            await this.backup.create(filePath, content, hash);
             const lines = content.split('\n');
 
             // Sort extractions by line number (reverse order for bottom-up replacement)
@@ -115,7 +122,8 @@ class Phase4Update {
             // Log transaction
             await this.transaction.log({
                 action: 'replace_stubs',
-                target: filename,
+                target: filePath,
+                hash,
                 stubs_created: fileExtractions.length,
                 status: 'success'
             });
@@ -224,8 +232,11 @@ class Phase4Update {
         // Get archived files from previous step
         const archivedFiles = this.state.archivedFiles || [];
 
+        // Always heal known-bad link patterns inside Topics (even if nothing was archived)
+        const topicLinkHeal = await this.healTopicLinks(topicsDir);
+
         if (archivedFiles.length === 0) {
-            return { linksHealed: 0, filesUpdated: 0 };
+            return { linksHealed: topicLinkHeal.linksHealed, filesUpdated: topicLinkHeal.filesUpdated };
         }
 
         // Get all topic files
@@ -274,20 +285,65 @@ class Phase4Update {
         return { linksHealed: totalLinksHealed, filesUpdated };
     }
 
+    async healTopicLinks(topicsDir) {
+        // Fix legacy cross-topic links created by older versions:
+        // - ../Topic.md#unknown
+        // - ../Topic.md
+        // - Topics/Topic.md#unknown
+        // - Topics/Topic.md
+        // Within Topics directory, correct form should be: Topic.md (anchor optional)
+        let linksHealed = 0;
+        let filesUpdated = 0;
+
+        let topicFiles = [];
+        try {
+            topicFiles = (await fs.readdir(topicsDir)).filter(f => f.endsWith('.md'));
+        } catch {
+            return { linksHealed: 0, filesUpdated: 0 };
+        }
+
+        for (const file of topicFiles) {
+            const filePath = path.join(topicsDir, file);
+            let content = await fs.readFile(filePath, 'utf8');
+            const before = content;
+
+            // Remove #unknown anchors everywhere inside Topics
+            content = content.replace(/\]\(([^)]+)#unknown\)/g, ']($1)');
+
+            // Rewrite cross-topic links that incorrectly point outside Topics
+            // Only rewrite for links that look like a single markdown file name (no slashes other than ../ or Topics/)
+            content = content.replace(/\]\(\.\.\/([A-Za-z0-9_-]+\.md)\)/g, ']($1)');
+            content = content.replace(/\]\(Topics\/([A-Za-z0-9_-]+\.md)\)/g, ']($1)');
+
+            if (content !== before) {
+                await this.fileops.writeAtomic(filePath, content);
+                filesUpdated++;
+                // best-effort count
+                linksHealed += (before.match(/#unknown\)/g) || []).length;
+                linksHealed += (before.match(/\]\(\.\.\/[A-Za-z0-9_-]+\.md\)/g) || []).length;
+                linksHealed += (before.match(/\]\(Topics\/[A-Za-z0-9_-]+\.md\)/g) || []).length;
+            }
+        }
+
+        return { linksHealed, filesUpdated };
+    }
+
     generateDailyLogStub(extraction) {
         const topicFile = this.capitalizeFirst(extraction.primary_topic);
         const date = this.extractDateFromFile(extraction.source_file);
 
+        const anchor = date !== 'unknown' ? `#${date}` : '';
+
         if (extraction.secondary_topics.length === 0) {
             // Single-topic stub
             return `## ${extraction.section_title}\n` +
-                `→ **Polished to [Topics/${topicFile}.md](Topics/${topicFile}.md#${date})** on ${new Date().toISOString().split('T')[0]}`;
+                `→ **Polished to [Topics/${topicFile}.md](Topics/${topicFile}.md${anchor})** on ${new Date().toISOString().split('T')[0]}`;
         } else {
             // Multi-topic stub
             const secondaryLinks = extraction.secondary_topics
                 .map(topic => {
                     const file = this.capitalizeFirst(topic);
-                    return `[Topics/${file}.md](Topics/${file}.md#${date})`;
+                    return `[Topics/${file}.md](Topics/${file}.md${anchor})`;
                 })
                 .join(', ');
 
@@ -296,14 +352,14 @@ class Phase4Update {
                 .join(' ');
 
             return `## ${extraction.section_title}\n` +
-                `→ **Primary:** [Topics/${topicFile}.md](Topics/${topicFile}.md#${date})\n` +
+                `→ **Primary:** [Topics/${topicFile}.md](Topics/${topicFile}.md${anchor})\n` +
                 `→ **Also in:** ${secondaryLinks}\n\n` +
                 `📎 Topics: ${allTags}`;
         }
     }
 
     extractDateFromFile(filename) {
-        const match = filename.match(/memory-(\d{4}-\d{2}-\d{2})/);
+        const match = filename.match(/memory-(\d{4}-\d{2}-\d{2})/) || filename.match(/(\d{4}-\d{2}-\d{2})/);
         return match ? match[1] : 'unknown';
     }
 

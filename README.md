@@ -2,52 +2,91 @@
 
 Intelligent memory organization for OpenClaw agents running on Raspberry Pi or any system.
 
+> Important: the tool expects a `memory/` folder in the **current working directory**.
+> When run under OpenClaw, this should be your OpenClaw workspace root.
+
 ## Table of Contents
 
 - [Features](#features)
 - [Installation](#installation)
 - [Usage](#usage)
 - [Configuration](#configuration)
-- [Architecture](#architecture)
-- [Troubleshooting](#troubleshooting)
 - [Development](#development)
 
 ## Features
 
 ### Core Capabilities
 
-- **🔍 Automatic Topic Discovery:** Scans hashtags across daily logs
-- **💎 Smart Merging:** Uses EmbeddingGemma to detect similar topics (#trade → #trading)
-- **🏷️ Multi-Topic Handling:** Sections with multiple tags get cross-referenced
-- **🔗 Link Healing:** Automatically updates links after archiving
-- **🛡️ Crash-Safe:** Atomic writes, backups, and automatic rollback
-- **🔄 Resume Support:** Picks up interrupted sessions (saves compute time)
-- **📊 Rich Reports:** Growth metrics and topic statistics
-
-### Design Principles
-
-1. **Mechanical First:** 90% pure algorithms, minimal LLM usage
-2. **Safety First:** Never delete until verified
-3. **Pi-Optimized:** Low RAM (~430MB), fast execution (~14s)
-4. **Fully Local:** No API calls, no token costs
+- **Automatic Topic Discovery:** scans hashtags across daily logs
+- **Smart merging:** embedding-based similarity when available; Levenshtein fallback
+- **Multi-topic handling:** sections with multiple tags get cross-referenced
+- **Crash-safe:** atomic writes, backups, and rollback
+- **Resume support:** interrupted sessions can be resumed
+- **Reports:** writes a markdown report under `memory/.polish-reports/`
 
 ## Installation
 
 ### Prerequisites
 
-- OpenClaw installed and running
-- Node.js 18+ (included with OpenClaw)
-- EmbeddingGemma (optional, for better accuracy)
-- 500MB free RAM
-- 10MB free disk space
+- Node.js 18+
+- An OpenClaw workspace with a `memory/` folder
 
-### Step 1: Clone Skill
+### Install dependencies
 
 ```bash
-cd ~/.openclaw/agents/YOUR_AGENT_NAME/skills/
-git clone https://github.com/yourusername/memory-polisher.git
+npm install
+```
 
-# Or download manually
-mkdir memory-polisher
-cd memory-polisher
-# Copy all files from repository
+## Usage
+
+### Run via OpenClaw
+
+In chat:
+
+```text
+Run memory-polisher
+```
+
+### Run locally (CLI)
+
+From your **workspace root** (the folder that contains `memory/`):
+
+```bash
+# from inside the skill folder, this will likely FAIL if you don't have ./memory
+# so cd to your workspace root first
+cd /path/to/openclaw/workspace
+
+node skills/memory-polisher-test/src/index.js
+```
+
+## Configuration
+
+Edit `config.yaml` in this skill folder.
+
+Common settings:
+
+```yaml
+execution_mode: mechanical  # or enhanced
+advanced:
+  lookback_days: 7
+  topics_directory: Topics/
+logging:
+  report_location: .polish-reports/
+recovery:
+  enable_checkpoints: true
+  checkpoint_file: .polish-cache/checkpoint.json
+```
+
+## Development
+
+### Run tests
+
+```bash
+npm test
+```
+
+### Lint
+
+```bash
+npm run lint
+```

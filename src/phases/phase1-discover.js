@@ -34,7 +34,7 @@ class Phase1Discover {
         this.logger.phase('Phase 1.3: Creating canonical topic map');
         const canonicalMap = await this.createCanonicalMap(discoveredTopics, mergeProposals);
 
-        this.logger.info(`✓ Discovered ${Object.keys(canonicalMap).length} canonical topics`);
+        this.logger.info(`✓ Discovered ${Object.keys(canonicalMap.canonicalMap || {}).length} canonical topics`);
 
         return {
             discovered_topics: discoveredTopics,
@@ -48,13 +48,19 @@ class Phase1Discover {
         const memoryDir = path.join(process.cwd(), 'memory');
         const lookbackDays = this.config.advanced.lookback_days || 7;
 
-        // Calculate date range
-        const today = new Date();
-        const startDate = new Date(today);
-        startDate.setDate(today.getDate() - lookbackDays);
+        // Calculate date range (normalize to whole days in local time)
+        const now = new Date();
 
-        // Find files in date range
-        const files = await this.scanner.findDailyLogs(memoryDir, startDate, today);
+        const endDate = new Date(now);
+        endDate.setHours(23, 59, 59, 999);
+
+        const startDate = new Date(now);
+        startDate.setDate(now.getDate() - lookbackDays);
+        startDate.setHours(0, 0, 0, 0);
+
+        // Find markdown files (all .md files under memory/, excluding Topics/ etc.)
+        // Date range filtering is only applied for date-like filenames.
+        const files = await this.scanner.findDailyLogs(memoryDir, startDate, endDate);
         this.logger.info(`Scanning ${files.length} files from ${startDate.toISOString().split('T')[0]}`);
 
         // Scan each file for hashtags
@@ -67,12 +73,13 @@ class Phase1Discover {
             const hashtags = this.scanner.extractHashtags(content, file);
 
             // Merge into global hashtag map
-            for (const [tag, occurrences] of Object.entries(hashtags)) {
+            for (const [tag, data] of Object.entries(hashtags)) {
                 if (!allHashtags[tag]) {
                     allHashtags[tag] = { count: 0, occurrences: [] };
                 }
-                allHashtags[tag].count += occurrences.length;
-                allHashtags[tag].occurrences.push(...occurrences);
+
+                allHashtags[tag].count += data.count;
+                allHashtags[tag].occurrences.push(...data.occurrences);
             }
         }
 

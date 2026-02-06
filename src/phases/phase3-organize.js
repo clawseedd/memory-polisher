@@ -294,7 +294,7 @@ class Phase3Organize {
             .join(' ');
 
         return `### ${date} — Cross-Reference\n\n` +
-            `📌 **Full entry:** [Topics/${primaryFile}.md](../${primaryFile}.md#${date})\n\n` +
+            `📌 **Full entry:** [${primaryFile}.md](${primaryFile}.md)\n\n` +
             `**Preview:** ${preview}...\n\n` +
             `**Tags:** ${allTags}\n` +
             `**Related File:** ${extraction.source_file}\n\n` +
@@ -328,7 +328,7 @@ class Phase3Organize {
     }
 
     extractDateFromFile(filename) {
-        const match = filename.match(/memory-(\d{4}-\d{2}-\d{2})/);
+        const match = filename.match(/memory-(\d{4}-\d{2}-\d{2})/) || filename.match(/(\d{4}-\d{2}-\d{2})/);
         return match ? match[1] : 'unknown';
     }
 

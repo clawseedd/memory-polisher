@@ -102,7 +102,7 @@ class Phase5Validate {
                 const content = await fs.readFile(filePath, 'utf8');
 
                 // Find all markdown links
-                const linkPattern = /\\[([^\\]]+)\]\\(([^)]+)\\)/g;
+                const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
                 let match;
 
                 while ((match = linkPattern.exec(content)) !== null) {
@@ -281,7 +281,12 @@ class Phase5Validate {
         for (const txn of transactions) {
             try {
                 if (txn.action === 'replace_stubs') {
-                    // Restore daily file from backup
+                    // Restore file from backup
+                    if (!txn.hash || !txn.target) {
+                        this.logger.warn(`Skipping rollback entry (missing hash/target): ${JSON.stringify({ action: txn.action, target: txn.target, hash: txn.hash })}`);
+                        continue;
+                    }
+
                     await this.backup.restore(txn.hash, txn.target);
                     this.logger.debug(`Restored: ${txn.target}`);
                 }
@@ -371,6 +376,7 @@ All changes have been reverted. Original files restored from backups.
 Your data is safe. No files were permanently modified.
 `;
 
+        await fs.mkdir(reportDir, { recursive: true });
         await fs.writeFile(reportPath, report, 'utf8');
     }
 

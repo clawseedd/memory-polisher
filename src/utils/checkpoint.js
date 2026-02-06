@@ -17,10 +17,11 @@ class Checkpoint {
         this.config = config;
         // FIX: Resolve base path once at initialization
         this.basePath = path.resolve(process.cwd(), 'memory');
-        this.checkpointPath = path.join(
-            this.basePath,
-            config.recovery.checkpoint_file
-        );
+        const checkpointFile =
+            (config && config.recovery && config.recovery.checkpoint_file) ||
+            'checkpoint.json';
+
+        this.checkpointPath = path.join(this.basePath, checkpointFile);
     }
 
     async save(state) {

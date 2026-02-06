@@ -72,16 +72,40 @@ class MemoryPolisher {
         try {
             this.logger.info('✨ Memory Polisher v1.0.0 starting...');
 
-            const resumePhase = new Phase6Resume(this.config, this.logger);
-            const resumeResult = await resumePhase.execute();
+            // Optional: clear checkpoint / disable resume
+            if (this.options.clear_checkpoint || this.options.no_resume || this.options.force_from_phase !== undefined) {
+                try {
+                    await this.checkpoint.delete();
+                } catch {
+                    // ignore
+                }
+            }
 
-            if (resumeResult.shouldResume) {
-                this.logger.info(`⏸️  Resuming from phase ${resumeResult.checkpoint.current_phase}`);
-                this.state = resumeResult.checkpoint;
-                return await this.resumeExecution(resumeResult.checkpoint);
+            if (!this.options.no_resume && this.options.force_from_phase === undefined) {
+                const resumePhase = new Phase6Resume(this.config, this.logger);
+                const resumeResult = await resumePhase.execute();
+
+                if (resumeResult.shouldResume) {
+                    this.logger.info(`⏸️  Resuming from phase ${resumeResult.checkpoint.current_phase}`);
+                    this.state = resumeResult.checkpoint;
+                    return await this.resumeExecution(resumeResult.checkpoint);
+                }
             }
 
             await this.executePhases();
+
+            // Mark checkpoint as completed & archive it so future runs don't show "interrupted"
+            try {
+                await this.checkpoint.save({
+                    ...this.state,
+                    status: 'completed',
+                    current_phase: '5',
+                    completed_steps: ['0', '1', '2', '3', '4', '5']
+                });
+                await this.checkpoint.archive();
+            } catch {
+                // ignore
+            }
 
             const duration = ((Date.now() - startTime) / 1000).toFixed(1);
             this.logger.success(`✅ Memory polisher complete in ${duration}s`);
@@ -203,12 +227,70 @@ async function main() {
         if (args[i] === '--archive' && args[i + 1]) options.archive = args[++i] === 'true';
         if (args[i] === '--verbose') options.verbose = true;
         if (args[i] === '--lookback-days' && args[i + 1]) options.lookback_days = parseInt(args[++i]);
+
+        // Force execution start from a given phase (e.g. 0) and ignore resume checkpoint
+        if ((args[i] === '--force-from-phase' || args[i] === '--from-phase') && args[i + 1]) {
+            options.force_from_phase = String(args[++i]);
+        }
+        if (args[i] === '--no-resume') options.no_resume = true;
+        if (args[i] === '--clear-checkpoint') options.clear_checkpoint = true;
     }
 
-    // SECURITY: Use safeLoad instead of load
+    // Workspace/memory directory resolution
+    // Many phases expect "<cwd>/memory".
+    // When run under OpenClaw, cwd is usually the workspace root, but harden
+    // for manual runs (e.g., running from the skill folder).
+    const isWorkspaceDir = async (dir) => {
+        try {
+            await fs.access(path.join(dir, 'memory'));
+            // Heuristic: real OpenClaw workspace root also contains AGENTS.md
+            await fs.access(path.join(dir, 'AGENTS.md'));
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
+    const candidates = [];
+    if (process.env.MEMORY_DIR) {
+        candidates.push(path.resolve(process.env.MEMORY_DIR, '..'));
+    }
+    if (process.env.OPENCLAW_WORKSPACE) {
+        candidates.push(path.resolve(process.env.OPENCLAW_WORKSPACE));
+    }
+
+    // current dir and parents
+    {
+        let cur = process.cwd();
+        for (let depth = 0; depth < 6; depth++) {
+            candidates.push(cur);
+            const parent = path.dirname(cur);
+            if (parent === cur) break;
+            cur = parent;
+        }
+    }
+
+    // common layout: <workspace>/skills/<skill>/src/index.js
+    candidates.push(path.resolve(__dirname, '../../..'));
+
+    let resolvedWorkspace = null;
+    for (const c of candidates) {
+        // eslint-disable-next-line no-await-in-loop
+        if (await isWorkspaceDir(c)) {
+            resolvedWorkspace = c;
+            break;
+        }
+    }
+
+    if (resolvedWorkspace && resolvedWorkspace !== process.cwd()) {
+        process.chdir(resolvedWorkspace);
+    }
+
+    // Load config.yaml
+    // NOTE: js-yaml v4 removed safeLoad; yaml.load is safe by default.
     const configPath = path.join(__dirname, '../config.yaml');
     const configContent = await fs.readFile(configPath, 'utf8');
-    const config = yaml.safeLoad(configContent); // FIX: Use safeLoad
+    const config = yaml.load(configContent);
 
     if (options.verbose) config.logging.verbose = true;
     if (options.archive !== undefined) config.archive.enabled = options.archive;

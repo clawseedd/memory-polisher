@@ -39,6 +39,8 @@ class Phase0Init {
 
         // Step 0.4: Initialize transaction log
         await this.transaction.init();
+        // Start a fresh transaction log for this run (keep old one as an archive)
+        await this.transaction.archive();
 
         return {
             cache_dir: cacheDir,
@@ -99,8 +101,10 @@ class Phase0Init {
         const memoryDir = path.join(process.cwd(), 'memory');
         const files = await fs.readdir(memoryDir);
 
-        // Filter daily log files
-        const dailyFiles = files.filter(f => /^memory-\d{4}-\d{2}-\d{2}\.md$/.test(f));
+        // Find markdown files under memory/ (excluding Topics/ etc.)
+        const Scanner = require('../core/scanner');
+        const scanner = new Scanner(this.config, this.logger);
+        const dailyFiles = await scanner.findDailyLogs(memoryDir);
 
         let backupCount = 0;
         let totalSize = 0;
